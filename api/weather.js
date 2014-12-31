@@ -8,26 +8,22 @@ var url      = require('url');
 var config   = require('../lib/config');
 var util     = require('../lib/util');
 
+var forecast = function(uri) {
 
-var weather = function(uri) {
+    return new Promise(function(resolve, reject) {
 
-    if (!uri) {
-        return {};
-    }
-
-    var param = {
-        method: 'GET',
-        encoding : null,
-        url: _.template(config.weather, {uri: uri})
-    };
-    
-    return new Promise(function (resolve, reject) {
+        var param = {
+            method: 'GET',
+            encoding : null,
+            url: _.template(config.weather, {uri: uri})
+        };
 
         request.get(param, function(err, res, _body) {
 
             if (err) {
                 reject(err);
             }
+
             var content =  iconv.decode(_body, 'gb2312');
 
             var $ = cheerio.load(content);
@@ -37,24 +33,80 @@ var weather = function(uri) {
             var $week_day7  = $wea_detail.find('.week_day7');
             var $week_day8  = $wea_detail.find('.week_day8');
 
-            var forecast7 = _weekDay8($week_day7, $);
+            var forecast7  = _weekDay7($);
+            var forecast15 = _weekDay8($);
 
-            var _url = url.parse(param.url, true);
+            var cityId = _getCityId($);
 
-            if (_url.query && Number(_url.query.day) === 15) {
-                var forecast15 = _weekDay8($week_day8, $);
-                resolve({
-                    forecast: forecast7.concat(forecast15)
-                });
-            }
-            else {
-                resolve({
-                    forecast7: forecast7
-                });
-            }
+            resolve({
+                forecast: forecast7.concat(forecast15),
+                cityId: cityId
+            });
         })
 
     })
+}
+
+/**
+ * 获取预警信息
+ * @param  {[type]} obj [description]
+ * @return {[type]}     [description]
+ */
+var getAlert = function(obj) {
+
+    var cityId = obj.cityId;
+    var timestamp = new Date().getTime();
+
+    return new Promise(function(resolve, reject) {
+
+        var param = {
+            url: _.template(config.alert, {cityId: cityId, timestamp})
+            meth: 'GET'
+        };
+
+        request.get(param, function(err, res, body) {
+
+            resolve('');
+
+        })
+
+    })
+};
+
+var getShikuang = function(obj) {
+
+    var cityId = obj.cityId;
+    var timestamp = new Date().getTime();
+
+    return new Promise(function(resolve, reject) {
+
+        var param = {
+            url: _.template(config.shikuang, {cityId: cityId, timestamp})
+            meth: 'GET'
+        };
+
+        request.get(param, function(err, res, body) {
+
+            resolve('');
+
+        })
+
+    })
+}
+
+var weather = function(uri) {
+
+    if (!uri) {
+        return {};
+    }
+
+    return forecast(uri)
+        .then(function(data) {
+            return new Promise.settle([getAlert(data), getShikuang(data)])
+                .then(function(results) {
+                    return ''
+                })
+        })
 };
 
 /**
@@ -63,8 +115,9 @@ var weather = function(uri) {
  * @param  {[$dom]} $   [description]
  * @return {[array]}    [description]
  */
-function _weekDay7(el, $) {
+function _weekDay7($) {
     
+    var el = $('.week_day7');
     var forecast = [];
 
     _.each(el.find('li'), function(item) {
@@ -98,8 +151,9 @@ function _weekDay7(el, $) {
  * @param  {[type]} $  [description]
  * @return {[array]}    [description]
  */
-function _weekDay8(el, $) {
+function _weekDay8($) {
 
+    var el = $('.week_day8');
     var forecast = [];
 
     _.each(el.find('li'), function(item) {
@@ -132,7 +186,6 @@ function _weekDay8(el, $) {
 function _airInfo(el, $) {
     console.log(el.toString())
     return point = el.find('b.cur').text();
-
 }
 
 module.exports = weather;
